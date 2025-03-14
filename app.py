@@ -28,18 +28,45 @@ def create_google_event(event_name, event_date, attendees):
 # Monday.com Webhook Verification (Challenge Response)
 @app.route("/monday-webhook", methods=["POST"])
 def monday_webhook():
-    data = request.get_json(force=True, silent=True)  # ✅ Force JSON Parsing
-    
+    data = request.get_json(force=True, silent=True)
+
     if not data:
         return jsonify({"status": "error", "message": "No JSON received"}), 400
 
     print("Received Data:", data)  # ✅ Debugging Log
 
-    # Challenge Verification
+    # ✅ Challenge Verification
     if "challenge" in data:
         return jsonify({"challenge": data["challenge"]})
 
-    return jsonify({"status": "ok", "message": "Processing started"}), 200
+    try:
+        event = data.get("event", {})
+
+        # ✅ 1. ივენტის სახელი (Item Name)
+        event_name = event.get("pulseName", "No Name")
+
+        # ✅ 2. თარიღის გადმოწერა (New Date)
+        column_value = event.get("value", {})
+        event_date = column_value.get("date", None)
+        event_time = column_value.get("time", "12:00:00")  # Default 12:00 PM
+
+        if not event_date:
+            return jsonify({"status": "error", "message": "No date found"}), 400
+
+        full_event_date = f"{event_date}T{event_time}"  # 2025-03-16T05:00:00 Format
+
+        # ✅ 3. მონაწილეები (Currently Not Available in Request)
+        attendees = []  # No Person Data Available in Webhook JSON
+
+        # ✅ 4. Google Calendar API Event Creation
+        create_google_event(event_name, full_event_date, attendees)
+
+    except Exception as e:
+        print("Error Processing Event:", str(e))  # ❌ Error Log
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+    return jsonify({"status": "ok", "message": "Event added to Google Calendar"}), 200
+
 
 
 if __name__ == "__main__":
