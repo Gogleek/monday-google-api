@@ -60,7 +60,11 @@ def monday_webhook():
 
         full_event_date = f"{event_date}T{event_time}"  # 2025-03-16T05:00:00 Format
 
-        attendees = []  # No Person Data Available in Webhook JSON
+        # ✅ 1. მოვძებნოთ მონიშნული პერსონები (Assigned Users)
+        assigned_users = event.get("column_values", {}).get("person", [])
+        attendees = [user.get("email") for user in assigned_users if "email" in user]
+
+        print("Attendees Emails:", attendees)  # ✅ Debugging
 
         create_google_event(event_name, full_event_date, attendees)
 
@@ -69,6 +73,7 @@ def monday_webhook():
         return jsonify({"status": "error", "message": str(e)}), 400
 
     return jsonify({"status": "ok", "message": "Event added to Google Calendar"}), 200
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
