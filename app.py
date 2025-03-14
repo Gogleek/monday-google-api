@@ -28,30 +28,19 @@ def create_google_event(event_name, event_date, attendees):
 # Monday.com Webhook Verification (Challenge Response)
 @app.route("/monday-webhook", methods=["POST"])
 def monday_webhook():
-    data = request.get_json()
+    data = request.get_json(force=True, silent=True)  # ✅ Force JSON Parsing
     
-    # ✅ STEP 1: Challenge Verification
+    if not data:
+        return jsonify({"status": "error", "message": "No JSON received"}), 400
+
+    print("Received Data:", data)  # ✅ Debugging Log
+
+    # Challenge Verification
     if "challenge" in data:
-        return jsonify({"challenge": data["challenge"]})  # უნდა დავუბრუნოთ challenge
+        return jsonify({"challenge": data["challenge"]})
 
-    try:
-        # ✅ STEP 2: რეალური ივენტის დამუშავება
-        event_name = data["event"]["pulseName"]  # ივენტის სახელი
-        event_date = data["event"]["column_values"]["date"] + "T10:00:00"  # თარიღი
-        
-        # **მონიშნული პერსონების ამოღება**
-        assigned_users = data["event"]["column_values"]["person"]
-        attendees = [user["email"] for user in assigned_users if "email" in user]  # Email-ების აღება
-        
-        if not attendees:
-            return jsonify({"status": "error", "message": "No attendees found"}), 400
+    return jsonify({"status": "ok", "message": "Processing started"}), 200
 
-        create_google_event(event_name, event_date, attendees)
-    
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
-
-    return jsonify({"status": "ok", "message": "Event added to Google Calendar"}), 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
