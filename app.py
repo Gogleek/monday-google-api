@@ -53,12 +53,15 @@ def monday_webhook():
 
         column_value = event.get("value", {})
         event_date = column_value.get("date", None)
-        event_time = column_value.get("time", "12:00:00")  # Default 12:00 PM
+        event_time = column_value.get("time", "12:00:00")  # თუ time არ არსებობს, Default "12:00:00"
+        
+        if event_time is None:  
+            event_time = "12:00:00"  # Default დრო 12:00 PM
 
         if not event_date:
             return jsonify({"status": "error", "message": "No date found"}), 400
 
-        full_event_date = f"{event_date}T{event_time}"  # 2025-03-16T05:00:00 Format
+        full_event_date = f"{event_date}T{event_time}"  # 2025-03-16T12:00:00 Format
 
         # ✅ 1. მოვძებნოთ მონიშნული პერსონები (Assigned Users)
         assigned_users = column_value.get("personsAndTeams", [])
