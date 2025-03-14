@@ -45,10 +45,10 @@ def create_google_event(event_name, event_date, attendees):
 
     try:
         event_result = service.events().insert(calendarId="primary", body=event).execute()
-        print("Event Created Successfully:", event_result)
+        print("✅ Event Created Successfully:", event_result)
         return event_result
     except Exception as e:
-        print("Google Calendar API Error:", str(e))
+        print("❌ Google Calendar API Error:", str(e))
         return None
 
 # Monday.com Webhook - იღებს მონაცემებს და აგზავნის Google Calendar-ში
@@ -59,7 +59,7 @@ def monday_webhook():
     if not data:
         return jsonify({"status": "error", "message": "No JSON received"}), 400
 
-    print("Received Data:", data)  # ✅ Debugging Log
+    print("📩 Received Data:", json.dumps(data, indent=2))  # ✅ Debugging Log
 
     # ✅ Challenge Verification
     if "challenge" in data:
@@ -86,11 +86,20 @@ def monday_webhook():
         assigned_users = column_value.get("personsAndTeams", [])
 
         if not assigned_users:
-            person_id = event.get("columnId")  # თუ `personsAndTeams` ველი არ არსებობს, მოვიძიოთ Column ID
-            if person_id:
-                email = get_monday_user_email(person_id)
-                if email:
-                    attendees.append(email)
+            # ვამოწმებთ, არის თუ არა column_values მონაცემებში `person` ველი
+            column_values = event.get("column_values", {})
+
+            if "person" in column_values and isinstance(column_values["person"], dict):
+                person_data = column_values["person"].get("value", [])
+
+                if isinstance(person_data, list):
+                    for user in person_data:
+                        if isinstance(user, dict) and "id" in user:
+                            email = get_monday_user_email(user["id"])
+                            if email:
+                                attendees.append(email)
+                            else:
+                                print(f"⚠️ No email found for user ID: {user['id']}")
 
         else:
             for user in assigned_users:
@@ -98,13 +107,18 @@ def monday_webhook():
                     email = get_monday_user_email(user["id"])
                     if email:
                         attendees.append(email)
+                    else:
+                        print(f"⚠️ No email found for user ID: {user['id']}")
 
-        print("Attendees Emails:", attendees)  # ✅ Debugging
+        print("✅ Final Attendees Emails:", attendees)  # ✅ Debugging
+
+        if not attendees:
+            print("⚠️ No attendees found. Event will be created without guests.")
 
         create_google_event(event_name, full_event_date, attendees)
 
     except Exception as e:
-        print("Error Processing Event:", str(e))
+        print("❌ Error Processing Event:", str(e))
         return jsonify({"status": "error", "message": str(e)}), 400
 
     return jsonify({"status": "ok", "message": "Event added to Google Calendar"}), 200
