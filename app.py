@@ -1,3 +1,5 @@
+import json
+import os
 from flask import Flask, request, jsonify
 import requests
 import datetime
@@ -6,14 +8,15 @@ from googleapiclient.discovery import build
 
 app = Flask(__name__)
 
-# Service Account JSON ფაილი
-SERVICE_ACCOUNT_FILE = "credentials.json"
+# ✅ JSON Key-ის წაკითხვა Environment Variable-დან
+GOOGLE_CREDENTIALS = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
+creds = service_account.Credentials.from_service_account_info(GOOGLE_CREDENTIALS, scopes=SCOPES)
+service = build("calendar", "v3", credentials=creds)
 
 # Google Calendar API ფუნქცია - ივენტის დამატება
 def create_google_event(event_name, event_date, attendees):
-    creds = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
-    service = build("calendar", "v3", credentials=creds)
+    print(f"Creating Google Event: {event_name}, Date: {event_date}, Attendees: {attendees}")
 
     event = {
         "summary": event_name,
@@ -22,10 +25,15 @@ def create_google_event(event_name, event_date, attendees):
         "attendees": [{"email": email} for email in attendees],  # მონიშნული პერსონები
     }
 
-    event_result = service.events().insert(calendarId="primary", body=event).execute()
-    return event_result
+    try:
+        event_result = service.events().insert(calendarId="primary", body=event).execute()
+        print("Event Created Successfully:", event_result)
+        return event_result
+    except Exception as e:
+        print("Google Calendar API Error:", str(e))
+        return None
 
-# Monday.com Webhook Verification (Challenge Response)
+# Monday.com Webhook - იღებს მონაცემებს და აგზავნის Google Calendar-ში
 @app.route("/monday-webhook", methods=["POST"])
 def monday_webhook():
     data = request.get_json(force=True, silent=True)
@@ -41,11 +49,8 @@ def monday_webhook():
 
     try:
         event = data.get("event", {})
-
-        # ✅ 1. ივენტის სახელი (Item Name)
         event_name = event.get("pulseName", "No Name")
 
-        # ✅ 2. თარიღის გადმოწერა (New Date)
         column_value = event.get("value", {})
         event_date = column_value.get("date", None)
         event_time = column_value.get("time", "12:00:00")  # Default 12:00 PM
@@ -55,19 +60,15 @@ def monday_webhook():
 
         full_event_date = f"{event_date}T{event_time}"  # 2025-03-16T05:00:00 Format
 
-        # ✅ 3. მონაწილეები (Currently Not Available in Request)
         attendees = []  # No Person Data Available in Webhook JSON
 
-        # ✅ 4. Google Calendar API Event Creation
         create_google_event(event_name, full_event_date, attendees)
 
     except Exception as e:
-        print("Error Processing Event:", str(e))  # ❌ Error Log
+        print("Error Processing Event:", str(e))
         return jsonify({"status": "error", "message": str(e)}), 400
 
     return jsonify({"status": "ok", "message": "Event added to Google Calendar"}), 200
-
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
