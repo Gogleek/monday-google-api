@@ -15,7 +15,7 @@ SCOPES = ["https://www.googleapis.com/auth/calendar"]
 creds = service_account.Credentials.from_service_account_info(GOOGLE_CREDENTIALS, scopes=SCOPES)
 service = build("calendar", "v3", credentials=creds)
 
-# Monday.com API-დან მომხმარებლის Email-ის მიღება
+# ✅ Monday.com API-დან მომხმარებლის Email-ის მიღება
 def get_monday_user_email(user_id):
     url = "https://api.monday.com/v2"
     headers = {
@@ -32,26 +32,29 @@ def get_monday_user_email(user_id):
             return users[0]["email"]
     return None
 
-# Google Calendar API ფუნქცია - ივენტის დამატება
-def create_google_event(event_name, event_date, attendees):
-    print(f"Creating Google Event: {event_name}, Date: {event_date}, Attendees: {attendees}")
+# ✅ Google Calendar API ფუნქცია - ივენტის დამატება
+def create_google_event(event_name, event_date, attendees, location=""):
+    print(f"📝 Creating Google Event: {event_name}, Date: {event_date}, Attendees: {attendees}, Location: {location}")
 
     event = {
         "summary": event_name,
+        "description": "This event was created from Monday.com\nClick the link below to join:\n",
         "start": {"dateTime": event_date, "timeZone": "UTC"},
         "end": {"dateTime": (datetime.datetime.fromisoformat(event_date) + datetime.timedelta(hours=1)).isoformat(), "timeZone": "UTC"},
-        "attendees": [{"email": email} for email in attendees if email],  # მონიშნული პერსონები
+        "attendees": [{"email": email} for email in attendees if email],
+        "location": location,
+        "reminders": {"useDefault": True}
     }
 
     try:
         event_result = service.events().insert(calendarId="primary", body=event).execute()
         print("✅ Event Created Successfully:", event_result)
-        return event_result
+        return event_result["htmlLink"]
     except Exception as e:
         print("❌ Google Calendar API Error:", str(e))
         return None
 
-# Monday.com Webhook - იღებს მონაცემებს და აგზავნის Google Calendar-ში
+# ✅ Monday.com Webhook - იღებს მონაცემებს და აგზავნის Google Calendar-ში
 @app.route("/monday-webhook", methods=["POST"])
 def monday_webhook():
     data = request.get_json(force=True, silent=True)
@@ -61,25 +64,24 @@ def monday_webhook():
 
     print("📩 Received Data:", json.dumps(data, indent=2))  # ✅ Debugging Log
 
-    # ✅ Challenge Verification
-    if "challenge" in data:
-        return jsonify({"challenge": data["challenge"]})
-
     try:
         event = data.get("event", {})
         event_name = event.get("pulseName", "No Name")
+        column_values = event.get("column_values", {})
+
+        print("🛠️ Column Values Debug:", json.dumps(column_values, indent=2))
 
         column_value = event.get("value", {})
         event_date = column_value.get("date", None)
-        event_time = column_value.get("time", "12:00:00")  # Default 12:00 PM
-        
-        if event_time is None:  
-            event_time = "12:00:00"  # Default დრო 12:00 PM
+        event_time = column_value.get("time", "12:00:00")
+
+        if event_time is None:
+            event_time = "12:00:00"
 
         if not event_date:
             return jsonify({"status": "error", "message": "No date found"}), 400
 
-        full_event_date = f"{event_date}T{event_time}"  # 2025-03-16T12:00:00 Format
+        full_event_date = f"{event_date}T{event_time}"
 
         # ✅ 1. მოვძებნოთ მონიშნული პერსონები (Assigned Users)
         attendees = []
@@ -87,11 +89,8 @@ def monday_webhook():
 
         if not assigned_users:
             # ვამოწმებთ, არის თუ არა column_values მონაცემებში `person` ველი
-            column_values = event.get("column_values", {})
-
             if "person" in column_values and isinstance(column_values["person"], dict):
                 person_data = column_values["person"].get("value", [])
-
                 if isinstance(person_data, list):
                     for user in person_data:
                         if isinstance(user, dict) and "id" in user:
@@ -110,19 +109,25 @@ def monday_webhook():
                     else:
                         print(f"⚠️ No email found for user ID: {user['id']}")
 
-        print("✅ Final Attendees Emails:", attendees)  # ✅ Debugging
+        print("✅ Final Attendees Emails:", attendees)
 
         if not attendees:
             print("⚠️ No attendees found. Event will be created without guests.")
 
-        create_google_event(event_name, full_event_date, attendees)
+        # ✅ ივენტის შექმნა Google Calendar-ში
+        event_link = create_google_event(event_name, full_event_date, attendees)
+
+        if event_link:
+            print(f"🔗 Google Calendar Event Link: {event_link}")
+            return jsonify({"status": "ok", "message": "Event added to Google Calendar", "event_link": event_link}), 200
+        else:
+            return jsonify({"status": "error", "message": "Event creation failed"}), 500
 
     except Exception as e:
         print("❌ Error Processing Event:", str(e))
         return jsonify({"status": "error", "message": str(e)}), 400
 
-    return jsonify({"status": "ok", "message": "Event added to Google Calendar"}), 200
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
+
