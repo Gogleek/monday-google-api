@@ -10,9 +10,27 @@ app = Flask(__name__)
 
 # ✅ JSON Key-ის წაკითხვა Environment Variable-დან
 GOOGLE_CREDENTIALS = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
+MONDAY_API_KEY = os.getenv("MONDAY_API_KEY")  # Monday API KEY
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 creds = service_account.Credentials.from_service_account_info(GOOGLE_CREDENTIALS, scopes=SCOPES)
 service = build("calendar", "v3", credentials=creds)
+
+# Monday.com API-დან მომხმარებლის Email-ის მიღება
+def get_monday_user_email(user_id):
+    url = "https://api.monday.com/v2"
+    headers = {
+        "Authorization": MONDAY_API_KEY,
+        "Content-Type": "application/json"
+    }
+    query = f'{{ users(ids: {user_id}) {{ email }} }}'
+    response = requests.post(url, headers=headers, json={"query": query})
+
+    if response.status_code == 200:
+        data = response.json()
+        users = data.get("data", {}).get("users", [])
+        if users and "email" in users[0]:
+            return users[0]["email"]
+    return None
 
 # Google Calendar API ფუნქცია - ივენტის დამატება
 def create_google_event(event_name, event_date, attendees):
@@ -53,7 +71,7 @@ def monday_webhook():
 
         column_value = event.get("value", {})
         event_date = column_value.get("date", None)
-        event_time = column_value.get("time", "12:00:00")  # თუ time არ არსებობს, Default "12:00:00"
+        event_time = column_value.get("time", "12:00:00")  # Default 12:00 PM
         
         if event_time is None:  
             event_time = "12:00:00"  # Default დრო 12:00 PM
@@ -64,8 +82,22 @@ def monday_webhook():
         full_event_date = f"{event_date}T{event_time}"  # 2025-03-16T12:00:00 Format
 
         # ✅ 1. მოვძებნოთ მონიშნული პერსონები (Assigned Users)
+        attendees = []
         assigned_users = column_value.get("personsAndTeams", [])
-        attendees = [user.get("email") for user in assigned_users if isinstance(user, dict) and "email" in user]
+
+        if not assigned_users:
+            person_id = event.get("columnId")  # თუ `personsAndTeams` ველი არ არსებობს, მოვიძიოთ Column ID
+            if person_id:
+                email = get_monday_user_email(person_id)
+                if email:
+                    attendees.append(email)
+
+        else:
+            for user in assigned_users:
+                if isinstance(user, dict) and "id" in user:
+                    email = get_monday_user_email(user["id"])
+                    if email:
+                        attendees.append(email)
 
         print("Attendees Emails:", attendees)  # ✅ Debugging
 
