@@ -22,7 +22,7 @@ def create_google_event(event_name, event_date, attendees):
         "summary": event_name,
         "start": {"dateTime": event_date, "timeZone": "UTC"},
         "end": {"dateTime": (datetime.datetime.fromisoformat(event_date) + datetime.timedelta(hours=1)).isoformat(), "timeZone": "UTC"},
-        "attendees": [{"email": email} for email in attendees],  # მონიშნული პერსონები
+        "attendees": [{"email": email} for email in attendees if email],  # მონიშნული პერსონები
     }
 
     try:
@@ -61,8 +61,8 @@ def monday_webhook():
         full_event_date = f"{event_date}T{event_time}"  # 2025-03-16T05:00:00 Format
 
         # ✅ 1. მოვძებნოთ მონიშნული პერსონები (Assigned Users)
-        assigned_users = event.get("column_values", {}).get("person", [])
-        attendees = [user.get("email") for user in assigned_users if "email" in user]
+        assigned_users = column_value.get("personsAndTeams", [])
+        attendees = [user.get("email") for user in assigned_users if isinstance(user, dict) and "email" in user]
 
         print("Attendees Emails:", attendees)  # ✅ Debugging
 
