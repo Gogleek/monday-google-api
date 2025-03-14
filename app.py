@@ -6,7 +6,7 @@ from googleapiclient.discovery import build
 
 app = Flask(__name__)
 
-# Service Account JSON ფაილი (ამას მერე დავამატებთ Render-ში)
+# Service Account JSON ფაილი
 SERVICE_ACCOUNT_FILE = "credentials.json"
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
@@ -25,12 +25,17 @@ def create_google_event(event_name, event_date, attendees):
     event_result = service.events().insert(calendarId="primary", body=event).execute()
     return event_result
 
-# Flask Webhook - იღებს მონაცემებს Monday.com-დან
+# Monday.com Webhook Verification (Challenge Response)
 @app.route("/monday-webhook", methods=["POST"])
 def monday_webhook():
     data = request.get_json()
     
+    # ✅ STEP 1: Challenge Verification
+    if "challenge" in data:
+        return jsonify({"challenge": data["challenge"]})  # უნდა დავუბრუნოთ challenge
+
     try:
+        # ✅ STEP 2: რეალური ივენტის დამუშავება
         event_name = data["event"]["pulseName"]  # ივენტის სახელი
         event_date = data["event"]["column_values"]["date"] + "T10:00:00"  # თარიღი
         
